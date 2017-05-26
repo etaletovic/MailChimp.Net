@@ -8,7 +8,6 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Net.Http;
-using static System.Net.Http.HttpContentExtensions;
 using System.Threading.Tasks;
 using ICSharpCode.SharpZipLib.GZip;
 using ICSharpCode.SharpZipLib.Tar;
@@ -33,7 +32,7 @@ namespace MailChimp.Net.Logic
 			{
 				var response =
 					await
-						HttpRequestExtensions.PostAsJsonAsync(client, string.Empty, request)
+						client.PostAsJsonAsync(string.Empty, request)
 							.ConfigureAwait(false);
 				await response.EnsureSuccessMailChimpAsync().ConfigureAwait(false);
 				return await response.Content.ReadAsAsync<Batch>().ConfigureAwait(false);
