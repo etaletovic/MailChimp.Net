@@ -4,9 +4,14 @@
 // </copyright>
 // --------------------------------------------------------------------------------------------------------------------
 
+using System;
 using System.Collections.Generic;
+using System.IO;
+using System.Net.Http;
 using static System.Net.Http.HttpContentExtensions;
 using System.Threading.Tasks;
+using ICSharpCode.SharpZipLib.GZip;
+using ICSharpCode.SharpZipLib.Tar;
 using MailChimp.Net.Core;
 using MailChimp.Net.Interfaces;
 
@@ -28,7 +33,7 @@ namespace MailChimp.Net.Logic
 			{
 				var response =
 					await
-						client.PostAsJsonAsync(string.Empty, request)
+						HttpRequestExtensions.PostAsJsonAsync(client, string.Empty, request)
 							.ConfigureAwait(false);
 				await response.EnsureSuccessMailChimpAsync().ConfigureAwait(false);
 				return await response.Content.ReadAsAsync<Batch>().ConfigureAwait(false);
@@ -81,6 +86,41 @@ namespace MailChimp.Net.Logic
 				return batchStatus;	
 			}
 		}
+		 public async Task<IEnumerable<OperationResponse>> GetOperationResponsesAsync(string batchId)
+        {
+            var batchInfo = await GetBatchStatus(batchId).ConfigureAwait(false);
+            if (!batchInfo.Status.Equals("finished")) return new List<OperationResponse>();
+
+            using (var client = new HttpClient())
+            using (var request = new HttpRequestMessage())
+            using (var memoryStream = new MemoryStream())
+            {
+                request.Method = HttpMethod.Get;
+                request.RequestUri = new Uri(batchInfo.ResponseBodyUrl);
+
+                var response = await client.SendAsync(request);
+
+                var responseContentStream = await response.Content.ReadAsStreamAsync();
+
+                using (var tarInputStream = new TarInputStream(new GZipInputStream(responseContentStream)))
+                {
+                    var tarEntry = tarInputStream.GetNextEntry();
+                    while (tarEntry != null)
+                    {
+                        if (!tarEntry.IsDirectory && tarEntry.Name.Contains(".json"))
+                        {
+                            tarInputStream.CopyEntryContents(memoryStream);
+                            memoryStream.Position = 0;
+                            break;
+                        }
+                        tarEntry = tarInputStream.GetNextEntry();
+                    }
+
+                    var operationResponses = memoryStream.Deserialize<IEnumerable<OperationResponse>>();
+                    return operationResponses;
+                }
+            }
+        }
 
 	}
 }
